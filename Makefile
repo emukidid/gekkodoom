@@ -20,7 +20,7 @@ BUILD		:=	build
 SOURCES		:=	src
 DATA		:=	 
 INCLUDES	:=	
-DIST		:=	dist/apps/WiiDoom
+DIST		:=	dist
 
 #---------------------------------------------------------------------------------
 # options for code generation

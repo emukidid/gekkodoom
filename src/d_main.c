@@ -1774,24 +1774,20 @@ void WADPicker()
 	TTF_Font *doomfnt24;
 	TTF_Font *doomfnt18;
 	if(sd){
-	doomfnt24 = TTF_OpenFont( "sd:/apps/wiidoom/data/fonts/DooM.ttf", 24 );
-	doomfnt18 = TTF_OpenFont( "sd:/apps/wiidoom/data/fonts/DooM.ttf", 18 );
+		doomfnt24 = TTF_OpenFont( "sd:/apps/wiidoom/data/fonts/DooM.ttf", 24 );
+		doomfnt18 = TTF_OpenFont( "sd:/apps/wiidoom/data/fonts/DooM.ttf", 18 );
 	}
 	if(usb){
-	doomfnt24 = TTF_OpenFont( "usb:/apps/wiidoom/data/fonts/DooM.ttf", 24 );
-	doomfnt18 = TTF_OpenFont( "usb:/apps/wiidoom/data/fonts/DooM.ttf", 18 );
+		doomfnt24 = TTF_OpenFont( "usb:/apps/wiidoom/data/fonts/DooM.ttf", 24 );
+		doomfnt18 = TTF_OpenFont( "usb:/apps/wiidoom/data/fonts/DooM.ttf", 18 );
 	}
 	SDL_Color clrFg = {0,0,255};
 	SDL_Color clrFgSelected = {255,0,0};
 	SDL_Color clrStartText = {255,255,255};
 	
 	// Load logo
-	SDL_Surface *logo;
-	if(sd)
-	logo = IMG_Load("sd:/apps/wiidoom/data/images/doom.bmp");
-	if(usb)
-	logo = IMG_Load("usb:/apps/wiidoom/data/images/doom.bmp");
-	
+	SDL_Surface *logo = IMG_Load(sd ? "sd:/apps/wiidoom/data/images/doom.bmp"
+								: "usb:/apps/wiidoom/data/images/doom.bmp");	
  	SDL_Rect rlogo = {LOGOX, LOGOY, 0, 0}; 
   
   // Start button
@@ -1837,43 +1833,34 @@ void WADPicker()
 	}
 	
 	// Load PWAD files
+	char *foundPwads [MAX_PWADS];
 	int numPWADSFound = 0;
 	struct stat st;
+	struct dirent *entry;
 	char filename[MAXPATHLEN]; // always guaranteed to be enough to hold a filename
-	DIR_ITER* dir;
-    if(sd)		
-	dir = diropen ("sd:/apps/wiidoom/data/pwads");
-	if(usb)
-	dir = diropen ("usb:/apps/wiidoom/data/pwads");
+	char *path = sd ? "sd:/apps/wiidoom/data/pwads":"usb:/apps/wiidoom/data/pwads";
+	DIR* dir = opendir (path);
 	if (dir != NULL) {
-		// Get a count of the files
-		while (dirnext(dir, filename, &st) == 0) {
+		// Get a count of the files & Create PWAD char array
+		while((entry = readdir(dir)) != NULL ) {
+			memset(&filename,0,1024);
+			sprintf(&filename, "%s/%s", path, entry->d_name);
+			stat(&filename,&st);
 			if ((st.st_mode & S_IFREG) && (strcasecmp(filename+strlen(filename)-4,".wad") == 0))
 			{
+				int len = strlen(filename);
+				foundPwads[numPWADSFound] = malloc(len);
+				strncpy(foundPwads[numPWADSFound], filename, len-4);
+				foundPwads[numPWADSFound][len-4] = 0;
 				numPWADSFound++;
 				if (numPWADSFound >= MAX_PWADS)
 					break;
 			}
 		}
 		// Reset dir
-		dirreset(dir);
+		closedir(dir);
 	}
-	char* foundPwads[numPWADSFound];
-	// Create PWAD char array
-	i=0;
-	while (dirnext(dir, filename, &st) == 0) {
-		if ((st.st_mode & S_IFREG) && (strcasecmp(filename+strlen(filename)-4,".wad") == 0))
-		{
-			int len = strlen(filename);
-			foundPwads[i] = malloc(len);
-			strncpy(foundPwads[i], filename, len-4);
-			foundPwads[i][len-4] = 0;
-			i++;
-			if (i >= MAX_PWADS)
-					break;
-		}
-	}
-	
+		
 	bool done = false;  
 	
   int ax = 320; 
