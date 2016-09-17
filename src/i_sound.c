@@ -599,34 +599,13 @@ void I_InitMusic(void)
 #ifdef HAVE_MIXER
   if (!music_tmp) {
 #ifndef _WIN32
-	//Determine SD or USB
-    FILE * fp2;
-    bool sd = false;
-	bool usb = false;
-    fp2 = fopen("sd:/apps/wiidoom/data/prboom.wad", "rb");
-    if(fp2)
-    sd = true;
-    if(!fp2){
-    fp2 = fopen("usb:/apps/wiidoom/data/prboom.wad", "rb");
-    }
-    if(fp2 && !sd)
-    usb = true;
-	
-	if(fp2);
-	fclose(fp2);
-	
-	if(sd)
-    music_tmp = strdup("sd:/apps/wiidoom/data/prboom-music-XXXXXX");
-	if(usb)
-	music_tmp = strdup("usb:/apps/wiidoom/data/prboom-music-XXXXXX");
-    {
-      int fd = mkstemp(music_tmp);
-      if (fd<0) {
-        lprintf(LO_ERROR, "I_InitMusic: failed to create music temp file %s", music_tmp);
-        free(music_tmp); return;
-      } else 
-        close(fd);
-    }
+	music_tmp = strdup("/apps/wiidoom/data/prboom-music-XXXXXX");
+    int fd = mkstemp(music_tmp);
+    if (fd<0) {
+      lprintf(LO_ERROR, "I_InitMusic: failed to create music temp file %s", music_tmp);
+      free(music_tmp); return;
+    } else 
+      close(fd);
 #else /* !_WIN32 */
     music_tmp = strdup("doom.tmp");
 #endif

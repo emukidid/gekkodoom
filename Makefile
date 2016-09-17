@@ -18,7 +18,7 @@ include $(DEVKITPPC)/wii_rules
 TARGET		:=	boot
 BUILD		:=	build
 SOURCES		:=	src
-DATA		:=	 
+DATA		:=	data
 INCLUDES	:=	
 DIST		:=	dist
 
@@ -26,7 +26,7 @@ DIST		:=	dist
 # options for code generation
 #---------------------------------------------------------------------------------
 
-CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE) -DHAVE_CONFIG_H
+CFLAGS	= -g -O2 -Wall -DWII $(MACHDEP) $(INCLUDE) -DHAVE_CONFIG_H
 CXXFLAGS	=	$(CFLAGS)
 
 LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map
@@ -124,10 +124,13 @@ $(OUTPUT).dol: $(OUTPUT).elf
 $(OUTPUT).elf: $(OFILES)
 
 #---------------------------------------------------------------------------------
-# This rule links in binary data with the .jpg extension
+# This rule links in binary data
 #---------------------------------------------------------------------------------
-%.jpg.o	:	%.jpg
-#---------------------------------------------------------------------------------
+%.bmp.o	:	%.bmp
+	@echo $(notdir $<)
+	$(bin2o)
+
+%.ttf.o	:	%.ttf
 	@echo $(notdir $<)
 	$(bin2o)
 

@@ -87,17 +87,47 @@
 #include "lprintf.h"  // jff 08/03/98 - declaration of lprintf
 #include "am_map.h"
 
-#include <wiiuse/wpad.h>
 #include <SDL/SDL.h>
 #include <SDL/SDL_ttf.h>
 #include <SDL/SDL_image.h>
 #include <ogcsys.h>
 #include <gccore.h>
 #include <sys/dir.h>
-#include <sdcard/wiisd_io.h>
 #include <fat.h>
 
-Mtx GXmodelView2D;
+#ifdef WII
+enum devices {
+	UNKNOWN_DEVICE=0,
+	SD_DEVICE,
+	USB_DEVICE
+};
+#include <wiiuse/wpad.h>
+#include <sdcard/wiisd_io.h>
+#else
+#include <sdcard/gcsd.h>
+enum devices {
+	UNKNOWN_DEVICE=0,
+	SD_A_DEVICE,
+	SD_B_DEVICE
+};
+#endif
+extern u8 doom_bmp[];
+extern const u32 doom_bmp_size;
+extern u8 doom_ttf[];
+extern const u32 doom_ttf_size;
+int selectedDevice = UNKNOWN_DEVICE;
+TTF_Font *doomfnt24;
+TTF_Font *doomfnt18;
+
+enum buttons {
+	BUTTON_UP,
+	BUTTON_DOWN,
+	BUTTON_LEFT,
+	BUTTON_RIGHT,
+	BUTTON_CONFIRM,
+	BUTTON_CANCEL,
+	BUTTON_EXIT,
+};
 
 void GetFirstMap(int *ep, int *map); // Ty 08/29/98 - add "-warp x" functionality
 static void D_PageDrawer(void);
@@ -810,25 +840,11 @@ static void IdentifyVersion (void)
   // set save path to -save parm or current dir
 
   //Determine SD or USB
-  FILE * fp2;
-  bool sd = false;
-  bool usb = false;
-  fp2 = fopen("sd:/apps/wiidoom/data/prboom.wad", "rb");
-  if(fp2)
-  sd = true;
-  if(!fp2){
-  fp2 = fopen("usb:/apps/wiidoom/data/prboom.wad", "rb");
-  }
-  if(fp2 && !sd)
-  usb = true;
+  FILE * fp2 = fopen("/apps/wiidoom/data/prboom.wad", "rb");
+
   
-  char* p;
-  if(sd)
-  p="sd:/apps/wiidoom/data";
-  if(usb)
-  p="usb:/apps/wiidoom/data";
-   if (p != NULL)
-     if (strlen(p) > PATH_MAX-12) p = NULL;
+  char* p = "/apps/wiidoom/data";
+  if (strlen(p) > PATH_MAX-12) p = NULL;
        strcpy(basesavegame,(p == NULL) ? I_DoomExeDir() : p);
 
   if ((i=M_CheckParm("-save")) && i<myargc-1) //jff 3/24/98 if -save present
@@ -1189,20 +1205,12 @@ static void D_DoomMainSetup(void)
 {
   int p,slot;
  
-  FILE * fp2;  
+  FILE * fp2 =  fopen("/apps/wiidoom/data/prboom.wad", "rb");
   bool checkup = false;
-  fp2 = fopen("sd:/apps/wiidoom/data/prboom.wad", "rb");
   if(fp2){
-  checkup = true;
-  remove("sd:/apps/wiidoom/data/output.txt");
+	checkup = true;
+	remove("/apps/wiidoom/data/output.txt");
   }
-  if(!fp2){
-  fp2 = fopen("usb:/apps/wiidoom/data/prboom.wad", "rb");
-  }
-  if(fp2 && !checkup)
-  remove("usb:/apps/wiidoom/data/output.txt");
-  
-  if(fp2)
   fclose(fp2);
 
   L_SetupConsoleMasks();
@@ -1710,6 +1718,277 @@ static void D_DoomMainSetup(void)
     }
 }
 
+void init_fonts() {
+	// Load embedded DooM font
+	TTF_Init();
+	doomfnt24 = TTF_OpenFontIndexRW(SDL_RWFromMem(doom_ttf, doom_ttf_size), 1, 24, 0);
+	doomfnt18 = TTF_OpenFontIndexRW(SDL_RWFromMem(doom_ttf, doom_ttf_size), 1, 18, 0);
+}
+
+bool buttonDown(int button) {
+#ifdef WII
+	u32 wpaddown = WPAD_ButtonsDown(0);
+#endif
+	u32 paddown = PAD_ButtonsDown(0);
+#ifdef WII
+	if(button==BUTTON_UP)
+		return ((wpaddown & WPAD_BUTTON_UP) || (paddown & PAD_BUTTON_UP));
+	else if(button==BUTTON_DOWN)
+		return ((wpaddown & WPAD_BUTTON_DOWN) || (paddown & PAD_BUTTON_DOWN));
+	else if(button==BUTTON_LEFT)
+		return ((wpaddown & WPAD_BUTTON_LEFT) || (paddown & PAD_BUTTON_LEFT));
+	else if(button==BUTTON_RIGHT)
+		return ((wpaddown & WPAD_BUTTON_RIGHT) || (paddown & PAD_BUTTON_RIGHT));
+	else if(button==BUTTON_CONFIRM)
+		return ((wpaddown & WPAD_BUTTON_A) || (paddown & PAD_BUTTON_A));
+	else if(button==BUTTON_CANCEL)
+		return ((wpaddown & WPAD_BUTTON_B) || (paddown & PAD_BUTTON_B));
+	else if(button==BUTTON_EXIT)
+		return ((wpaddown & WPAD_BUTTON_HOME) || (paddown & PAD_TRIGGER_Z));
+#else
+	if(button==BUTTON_UP)
+		return paddown & PAD_BUTTON_UP;
+	else if(button==BUTTON_DOWN)
+		return paddown & PAD_BUTTON_DOWN;
+	else if(button==BUTTON_LEFT)
+		return paddown & PAD_BUTTON_LEFT;
+	else if(button==BUTTON_RIGHT)
+		return paddown & PAD_BUTTON_RIGHT;
+	else if(button==BUTTON_CONFIRM)
+		return paddown & PAD_BUTTON_A;
+	else if(button==BUTTON_CANCEL)
+		return paddown & PAD_BUTTON_B;
+	else if(button==BUTTON_EXIT)
+		return paddown & PAD_TRIGGER_Z;
+#endif
+	return false;
+}
+
+void DevicePicker()
+{
+	int STARTALPHA = 0;
+	bool STARTFADEIN = TRUE;
+		
+	SDL_Surface *screen;
+	screen = SDL_SetVideoMode(640, 480, 16, SDL_DOUBLEBUF);
+		
+	SDL_Color clrText = {255,255,255};
+	
+	// Load logo
+	SDL_RWops *logo_rw = SDL_RWFromMem(doom_bmp, doom_bmp_size);
+	SDL_Surface *logo = IMG_LoadTyped_RW(logo_rw, 1, "bmp");
+ 	SDL_Rect rlogo = {(640/2) - (logo->w/2), 10, 0, 0}; 
+
+	// Select Device Text
+  	SDL_Rect selectDeviceRect = {50, 30 + logo->h, 250, 40};
+	SDL_Surface *selectDevice = TTF_RenderText_Solid(doomfnt18, "Welcome to DooM. Select your device below." , clrText);
+		
+	// Confirm button
+	SDL_Rect confirmRect = {350, 415, 250, 40};
+	SDL_Rect confirmTextRect = {confirmRect.x + 40, confirmRect.y + 5, confirmRect.w, confirmRect.h};
+	SDL_Surface *confirmButton = TTF_RenderText_Solid(doomfnt24, "CONFIRM" , clrText);
+
+#ifdef WII
+	// SD button
+	SDL_Rect sdDeviceRect = {100, 350, 80, 40};
+	SDL_Surface *sdDeviceButton = TTF_RenderText_Solid(doomfnt24, "SD" , clrText);
+	
+	// USB button
+	SDL_Rect usbDeviceRect = {400, 350, 80, 40};
+	SDL_Surface *usbDeviceButton = TTF_RenderText_Solid(doomfnt24, "USB" , clrText);
+#else
+	// SD Slot A button
+	SDL_Rect sdDeviceARect = {100, 350, 120, 40};
+	SDL_Surface *sdDeviceAButton = TTF_RenderText_Solid(doomfnt24, "SD Slot A" , clrText);
+	
+	// SD Slot B button
+	SDL_Rect sdDeviceBRect = {400, 350, 120, 40};
+	SDL_Surface *sdDeviceBButton = TTF_RenderText_Solid(doomfnt24, "SD Slot B" , clrText);
+#endif
+  
+	// Create cursor surface
+	SDL_Surface *sCursor = TTF_RenderText_Solid(doomfnt24, "O", clrText);  
+	SDL_Surface *xCursor = TTF_RenderText_Solid(doomfnt24, "X", clrText);  
+  
+	// Create text surface
+	bool done = false;  
+	
+	int ax = 320; 
+	int ay = 240;
+  
+	while (!done)
+	{  		
+		SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
+	
+#ifdef WII
+		// Get Wiimote IR data
+		ir_t ir;
+
+		WPAD_IR(0, &ir);
+		if(ir.ax > 0 && ir.ax < 640)
+			ax = ir.ax;
+		if(ir.ay > 0 && ir.ay < 480)
+			ay = ir.ay;
+#endif
+		s32 pad_stickx = PAD_StickX(0);
+		s32 pad_sticky = PAD_StickY(0);
+		if (pad_stickx < -20 && ax > 0) //Left
+			ax -= 2;
+		else if (pad_stickx > 20 && ax < 640-sCursor->w) //Right
+			ax += 2;
+
+		if (pad_sticky > 20 && ay > 0)//Up
+			ay -= 2;
+		else if (pad_sticky < -20 && ay < 480-sCursor->h)//Down
+			ay += 2;
+		
+		// Display Stuff
+		SDL_BlitSurface (logo, NULL, screen, &rlogo);
+		SDL_BlitSurface(selectDevice, NULL, screen, &selectDeviceRect);
+  	
+		// Display start button
+		// Do alpha fading for start button
+		if (STARTALPHA >= 253)
+			STARTFADEIN = false;
+		else if (STARTALPHA <= 2)
+			STARTFADEIN = true;
+		if (STARTFADEIN)
+			STARTALPHA+=5;
+		else
+			STARTALPHA-=5;
+		SDL_SetAlpha(confirmButton, SDL_SRCALPHA, STARTALPHA);
+		
+		if (selectedDevice != UNKNOWN_DEVICE)
+		{
+			SDL_FillRect(screen, &confirmRect, SDL_MapRGB(screen->format, 82, 0, 0));
+			SDL_BlitSurface(confirmButton, NULL, screen, &confirmTextRect);
+		}
+
+		// Check for exit
+		if(buttonDown(BUTTON_EXIT)) exit(0);
+
+		// Check for cursor position
+		bool cursorOver = false;
+		if ((ax > confirmRect.x) && (ax < confirmRect.x+confirmRect.w) && (ay >= confirmRect.y-confirmRect.h) 
+				&& (selectedDevice != UNKNOWN_DEVICE))
+			cursorOver = true;
+		
+		// Confirm Button
+		if ((ax > confirmRect.x) && (ax < confirmRect.x+confirmRect.w) && (ay >= confirmRect.y-confirmRect.h) 
+				&& (selectedDevice != UNKNOWN_DEVICE)
+				&& (buttonDown(BUTTON_CONFIRM)))
+			done = true;
+#ifdef WII
+		SDL_BlitSurface(sdDeviceButton, NULL, screen, &sdDeviceRect);
+		SDL_BlitSurface(usbDeviceButton, NULL, screen, &usbDeviceRect);
+		// SD Button
+		if ((ax >= sdDeviceRect.x) && (ax < sdDeviceRect.x+sdDeviceRect.w) && (ay >= sdDeviceRect.y && ay < sdDeviceRect.y+sdDeviceRect.h))
+			cursorOver = true;
+		if ((ax >= sdDeviceRect.x) && (ax < sdDeviceRect.x+sdDeviceRect.w) && (ay >= sdDeviceRect.y && ay < sdDeviceRect.y+sdDeviceRect.h) 
+				&& (buttonDown(BUTTON_CONFIRM)))
+			selectedDevice = SD_DEVICE;
+		// USB Button
+		if ((ax >= usbDeviceRect.x) && (ax < usbDeviceRect.x+usbDeviceRect.w) && (ay >= usbDeviceRect.y && ay < usbDeviceRect.y+usbDeviceRect.h))
+			cursorOver = true;
+		if ((ax >= usbDeviceRect.x) && (ax < usbDeviceRect.x+usbDeviceRect.w) && (ay >= usbDeviceRect.y && ay < usbDeviceRect.y+usbDeviceRect.h) 
+				&& (buttonDown(BUTTON_CONFIRM)))
+			selectedDevice = USB_DEVICE;
+#else
+		SDL_BlitSurface(sdDeviceAButton, NULL, screen, &sdDeviceARect);
+		SDL_BlitSurface(sdDeviceBButton, NULL, screen, &sdDeviceBRect);
+		// SDA Button
+		if ((ax >= sdDeviceARect.x) && (ax < sdDeviceARect.x+sdDeviceARect.w) && (ay >= sdDeviceARect.y && ay < sdDeviceARect.y+sdDeviceARect.h))
+			cursorOver = true;
+		if ((ax >= sdDeviceARect.x) && (ax < sdDeviceARect.x+sdDeviceARect.w) && (ay >= sdDeviceARect.y && ay < sdDeviceARect.y+sdDeviceARect.h)
+				&& (buttonDown(BUTTON_CONFIRM)))
+			selectedDevice = SD_A_DEVICE;
+		// SDB Button
+		if ((ax >= sdDeviceBRect.x) && (ax < sdDeviceBRect.x+sdDeviceBRect.w) && (ay >= sdDeviceBRect.y && ay < sdDeviceBRect.y+sdDeviceBRect.h))
+			cursorOver = true;
+		if ((ax >= sdDeviceBRect.x) && (ax < sdDeviceBRect.x+sdDeviceBRect.w) && (ay >= sdDeviceBRect.y && ay < sdDeviceBRect.y+sdDeviceBRect.h)
+				&& (buttonDown(BUTTON_CONFIRM)))
+			selectedDevice = SD_B_DEVICE;
+#endif
+		
+		// Draw cursor
+		SDL_Rect rcDest = {ax,ay, 0,0};
+		SDL_BlitSurface(cursorOver ? xCursor:sCursor,NULL,screen,&rcDest );
+		
+		SDL_Flip(screen);
+	}
+
+#ifdef WII
+	if(selectedDevice==SD_DEVICE) {
+		fatUnmount("fs");
+		if(!fatMountSimple("fs", &__io_wiisd))
+			selectedDevice = UNKNOWN_DEVICE;
+	}
+	else if (selectedDevice==USB_DEVICE) {
+		fatUnmount("fs");
+		if(!fatMountSimple("fs", &__io_usbstorage)) {
+			int retry = 10;
+			if(__io_usbstorage.isInserted()) {
+				while (retry) {
+					if (fatMountSimple("fs", &__io_usbstorage)) break;
+					sleep(1);
+					retry--;
+				}
+			}
+			if(retry == 0 || !__io_usbstorage.isInserted())
+				selectedDevice = UNKNOWN_DEVICE;
+		}
+	}
+#else
+	if(selectedDevice==SD_A_DEVICE) {
+		fatUnmount("fs");
+		if(!fatMountSimple("fs", &__io_gcsda))
+			selectedDevice = UNKNOWN_DEVICE;
+	}
+	else if(selectedDevice==SD_B_DEVICE) {
+		fatUnmount("fs");
+		if(!fatMountSimple("fs", &__io_gcsdb))
+			selectedDevice = UNKNOWN_DEVICE;
+	}
+#endif
+
+	bool success = true;
+	// Blank screen and go to wad selection or back here if init failed
+	if(selectedDevice == UNKNOWN_DEVICE) {
+		SDL_Color errorColor = {82, 0, 0};
+	 	SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
+		SDL_Rect noDeviceRect = {25, 480/2-40, 250, 40};
+		SDL_Surface *noDevice = TTF_RenderText_Solid(doomfnt24, "Device startup failed. Try again." , errorColor);
+		SDL_BlitSurface(noDevice, NULL, screen, &noDeviceRect);
+		SDL_Flip(screen);
+		sleep(5);
+		success = false;
+	} else {
+		chdir("fs:/");
+	}
+	
+	// Check necessary files
+ 	if(success) {
+		
+	}
+	
+	// If everything went well, continue.
+	if(success) {
+		SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
+		SDL_Flip(screen);
+	}
+	SDL_FreeSurface(sCursor);
+	SDL_FreeSurface (logo);
+	SDL_FreeSurface(confirmButton);
+#ifdef WII
+	SDL_FreeSurface(sdDeviceButton);
+	SDL_FreeSurface(usbDeviceButton);
+#else
+	SDL_FreeSurface(sdDeviceAButton);
+	SDL_FreeSurface(sdDeviceBButton);
+#endif
+	SDL_FreeSurface (screen);
+}
+
 void WADPicker()
 {
 	int IWADCHARX = 100;
@@ -1737,8 +2016,6 @@ void WADPicker()
 	bool STARTFADEIN = TRUE;
 	int STARTWIDTH = 250;
 	int STARTHEIGHT = 40;
-	int LOGOX = 10;
-	int LOGOY = 10;
 	int CHAR_YPOS;
 	
 	int joyWait = SDL_GetTicks();
@@ -1750,61 +2027,31 @@ void WADPicker()
 	SDL_Surface *screen;
 	screen = SDL_SetVideoMode(640, 480, 16, SDL_DOUBLEBUF);
 	
-	//Determine SD or USB
-    FILE * fp2;
-    bool sd = false;
-	bool usb = false;
-    fp2 = fopen("sd:/apps/wiidoom/data/prboom.cfg", "rb");
-    if(fp2)
-    sd = true;
-    if(!fp2){
-    fp2 = fopen("usb:/apps/wiidoom/data/prboom.cfg", "rb");
-    }
-    if(fp2 && !sd)
-    usb = true;
-	
-	if(fp2);
-	fclose(fp2);
-	
-	if(!sd && !usb)
-    exit(0);
-
-	// Load font
-	TTF_Init();
-	TTF_Font *doomfnt24;
-	TTF_Font *doomfnt18;
-	if(sd){
-		doomfnt24 = TTF_OpenFont( "sd:/apps/wiidoom/data/fonts/DooM.ttf", 24 );
-		doomfnt18 = TTF_OpenFont( "sd:/apps/wiidoom/data/fonts/DooM.ttf", 18 );
-	}
-	if(usb){
-		doomfnt24 = TTF_OpenFont( "usb:/apps/wiidoom/data/fonts/DooM.ttf", 24 );
-		doomfnt18 = TTF_OpenFont( "usb:/apps/wiidoom/data/fonts/DooM.ttf", 18 );
-	}
 	SDL_Color clrFg = {0,0,255};
 	SDL_Color clrFgSelected = {255,0,0};
 	SDL_Color clrStartText = {255,255,255};
 	
 	// Load logo
-	SDL_Surface *logo = IMG_Load(sd ? "sd:/apps/wiidoom/data/images/doom.bmp"
-								: "usb:/apps/wiidoom/data/images/doom.bmp");	
- 	SDL_Rect rlogo = {LOGOX, LOGOY, 0, 0}; 
+	SDL_RWops *logo_rw = SDL_RWFromMem(doom_bmp, doom_bmp_size);
+	SDL_Surface *logo = IMG_LoadTyped_RW(logo_rw, 1, "bmp");
+ 	SDL_Rect rlogo = {(640/2) - (logo->w/2), 10, 0, 0}; 
+
   
-  // Start button
-  SDL_Rect startRect = {STARTX, STARTY, STARTWIDTH, STARTHEIGHT};
-  SDL_Rect startTextRect = {STARTX + 70, STARTY + 5, STARTWIDTH, STARTHEIGHT};
-  SDL_Surface *startButton = TTF_RenderText_Solid(doomfnt24, "START" , clrStartText);
+	// Start button
+	SDL_Rect startRect = {STARTX, STARTY, STARTWIDTH, STARTHEIGHT};
+	SDL_Rect startTextRect = {STARTX + 70, STARTY + 5, STARTWIDTH, STARTHEIGHT};
+	SDL_Surface *startButton = TTF_RenderText_Solid(doomfnt24, "START" , clrStartText);
 
  	// PWAD Header
  	SDL_Rect pwadHeaderRect = {395, 30, 250, 40};
 	SDL_Surface *pwadHeader = TTF_RenderText_Solid(doomfnt18, "PWAD (Optional)" , clrStartText);
 	  
-  // Create cursor surface
-  SDL_Surface *sCursor = TTF_RenderText_Solid(doomfnt24, ".", clrStartText);  
+	// Create cursor surface
+	SDL_Surface *sCursor = TTF_RenderText_Solid(doomfnt24, ".", clrStartText);  
   
   
-  // Create text surface
-  SDL_Surface *sText = NULL;
+	// Create text surface
+	SDL_Surface *sText = NULL;
 
 	// Load Boxes
 	SDL_Rect rIWADBox_outer = {IWADBOXX, IWADBOXY, IWADBOXWIDTH, IWADBOXHEIGHT};
@@ -1815,7 +2062,7 @@ void WADPicker()
 		PWADBOXWIDTH - PWADBOXLINEWIDTH, PWADBOXHEIGHT - IWADBOXLINEWIDTH};
 	
   
-  int selectedIWAD = -1;
+	int selectedIWAD = -1;
 	// Load IWAD files	
 	char* foundIwads[nstandard_iwads];
 	int numIWADSFound = 0;		
@@ -1838,14 +2085,14 @@ void WADPicker()
 	struct stat st;
 	struct dirent *entry;
 	char filename[MAXPATHLEN]; // always guaranteed to be enough to hold a filename
-	char *path = sd ? "sd:/apps/wiidoom/data/pwads":"usb:/apps/wiidoom/data/pwads";
+	char *path = "/apps/wiidoom/data/pwads";
 	DIR* dir = opendir (path);
 	if (dir != NULL) {
 		// Get a count of the files & Create PWAD char array
 		while((entry = readdir(dir)) != NULL ) {
 			memset(&filename,0,1024);
 			sprintf(&filename, "%s/%s", path, entry->d_name);
-			stat(&filename,&st);
+			stat(&filename[0],&st);
 			if ((st.st_mode & S_IFREG) && (strcasecmp(filename+strlen(filename)-4,".wad") == 0))
 			{
 				int len = strlen(filename);
@@ -1863,19 +2110,17 @@ void WADPicker()
 		
 	bool done = false;  
 	
-  int ax = 320; 
-  int ay = 240;
+	int ax = 320; 
+	int ay = 240;
   
   while (!done)
   {  		
   	SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
 	
-	PAD_ScanPads();
 	s32 pad_stickx = PAD_StickX(0);
     s32 pad_sticky = PAD_StickY(0);
   	
   	// Get Wiimote data
-  	WPAD_ScanPads();
   	u32 wpaddown = WPAD_ButtonsDown(0);
   	ir_t ir;
 	
@@ -2042,27 +2287,17 @@ void WADPicker()
 		SDL_Flip(screen);
   }
 
-  // Set IWAD
-  if(sd){
-  selectedIWADFile = malloc(strlen("sd:/apps/wiidoom/data/") + strlen(foundIwads[selectedIWAD])+4);
-	sprintf(selectedIWADFile, "%s%s.wad", "sd:/apps/wiidoom/data/", foundIwads[selectedIWAD]);
-  }
-  if(usb){
-  selectedIWADFile = malloc(strlen("usb:/apps/wiidoom/data/") + strlen(foundIwads[selectedIWAD])+4);
-	sprintf(selectedIWADFile, "%s%s.wad", "usb:/apps/wiidoom/data/", foundIwads[selectedIWAD]);
-  }
+	// Set IWAD
+	selectedIWADFile = malloc(1024);
+	sprintf(selectedIWADFile, "%s%s.wad", "/apps/wiidoom/data/", foundIwads[selectedIWAD]);
+ 
 	
 	// Load PWADs
 	for (selectedPWADIndex = 0; selectedPWADIndex < MAX_PWADS; selectedPWADIndex++)
 		if (selectedPWADs[selectedPWADIndex] != -1)
 		{
-		char *p;
-		if(sd)
-  		p = "sd:/apps/wiidoom/data/pwads/";
-		if(usb)
-		p = "usb:/apps/wiidoom/data/pwads/";
-			char *f;
-			f = malloc(strlen(p) + strlen(foundPwads[selectedPWADs[selectedPWADIndex]]) + 4);
+		char *p = "/apps/wiidoom/data/pwads/";
+			char *f = malloc(strlen(p) + strlen(foundPwads[selectedPWADs[selectedPWADIndex]]) + 4);
 			sprintf(f, "%s%s.wad", p, foundPwads[selectedPWADs[selectedPWADIndex]]);
 			selectedPWADFiles[numSelectedPWADFiles] = malloc(sizeof(f));
 			strcpy(selectedPWADFiles[numSelectedPWADFiles], f);
@@ -2071,21 +2306,77 @@ void WADPicker()
 		}
 		 
 	// Blank screen and start Doom
- 	SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
- 	SDL_Flip(screen);
- 
- 	//if (strncmp(foundIwads[selectedIWAD], "doom1", 5) == 0)
-	//	return;
- 	//if (strncmp(foundIwads[selectedIWAD], "doom2", 5) == 0)
-	//	return;
+ 	SDL_Color errorColor = {82, 0, 0};
+	SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
+	SDL_Rect noDeviceRect = {(640/2)-100, (480/2)-40, 250, 40};
+	SDL_Surface *noDevice = TTF_RenderText_Solid(doomfnt24, "STARTING ..." , errorColor);
+	SDL_BlitSurface(noDevice, NULL, screen, &noDeviceRect);
+	SDL_Flip(screen);
 		
-  SDL_FreeSurface(sCursor);
-  SDL_FreeSurface (logo);
-  SDL_FreeSurface(startButton);
-  TTF_CloseFont(doomfnt24);
-  //TTF_CloseFont(doomfnt18);
+	SDL_FreeSurface(sCursor);
+	SDL_FreeSurface (logo);
+	SDL_FreeSurface(startButton);
+	TTF_CloseFont(doomfnt24);
+	TTF_CloseFont(doomfnt18);
 	TTF_Quit();
 	SDL_FreeSurface (screen);
+}
+
+
+/****************************************************************************
+ * USB Gecko Debugging
+ ***************************************************************************/
+
+static bool gecko = false;
+static mutex_t gecko_mutex = 0;
+
+static ssize_t __out_write(struct _reent *r, int fd, const char *ptr, size_t len)
+{
+	if (!gecko || len == 0)
+		return len;
+	
+	if(!ptr || len < 0)
+		return -1;
+
+	u32 level;
+	LWP_MutexLock(gecko_mutex);
+	level = IRQ_Disable();
+	usb_sendbuffer(1, ptr, len);
+	IRQ_Restore(level);
+	LWP_MutexUnlock(gecko_mutex);
+	return len;
+}
+
+const devoptab_t gecko_out = {
+	"stdout",	// device name
+	0,			// size of file structure
+	NULL,		// device open
+	NULL,		// device close
+	__out_write,// device write
+	NULL,		// device read
+	NULL,		// device seek
+	NULL,		// device fstat
+	NULL,		// device stat
+	NULL,		// device link
+	NULL,		// device unlink
+	NULL,		// device chdir
+	NULL,		// device rename
+	NULL,		// device mkdir
+	0,			// dirStateSize
+	NULL,		// device diropen_r
+	NULL,		// device dirreset_r
+	NULL,		// device dirnext_r
+	NULL,		// device dirclose_r
+	NULL		// device statvfs_r
+};
+
+static void USBGeckoOutput()
+{
+	gecko = usb_isgeckoalive(1);
+	LWP_MutexInit(&gecko_mutex, false);
+
+	devoptab_list[STD_OUT] = &gecko_out;
+	devoptab_list[STD_ERR] = &gecko_out;
 }
 
 //
@@ -2095,60 +2386,41 @@ void WADPicker()
 void D_DoomMain(void)
 {
 	// Init wii stuff
-  wii_init();
+	wii_init();
+	init_fonts();
   
-  // Load WAD Picker
+	// Select a device
+	while(selectedDevice == UNKNOWN_DEVICE) {
+		// TODO circumvent this if argv has passed in the device (maybe)
+		DevicePicker();
+	}
+	// Load WAD Picker
 	WADPicker();
 	
-  D_DoomMainSetup(); // CPhipps - setup out of main execution stack
+	D_DoomMainSetup(); // CPhipps - setup out of main execution stack
 
-  D_DoomLoop ();  // never returns
+	D_DoomLoop ();  // never returns
+}
+
+static void ProperScanPADS()	{
+#ifdef WII
+	WPAD_ScanPads();
+#endif
+	PAD_ScanPads(); 
 }
 
 void wii_init()
-{
-     
-  int res;
-  u32 type;
-  bool found = false;
-
-  // Init SD(HC)
-  fatUnmount("sd:/");
-  __io_wiisd.shutdown();
-  fatMountSimple("sd", &__io_wiisd);
-  
-  //Init USB
-  fatUnmount("usb:/");
-  bool isMounted = fatMountSimple("usb", &__io_usbstorage);
-  if(!isMounted)
-  {		
-      fatUnmount("usb:/");
-      fatMountSimple("usb", &__io_usbstorage);
-
-      bool isInserted = __io_usbstorage.isInserted();
-
-      if (isInserted)
-      {
-          int retry = 10;		
-		
-		  while (retry)
-		  {
-   	          isMounted = fatMountSimple("usb", &__io_usbstorage);
-			  if (isMounted) break;
-			  sleep(1);
-			  retry--;
-		  }
-      }
-  }
-  
+{  
   PAD_Init();
 
   // Init the wiimotes
   WPAD_Init();
   WPAD_SetDataFormat(0, WPAD_FMT_BTNS_ACC_IR);
   WPAD_SetVRes(WPAD_CHAN_ALL, SCREENWIDTH, SCREENHEIGHT);
-
+  VIDEO_SetPostRetraceCallback (ProperScanPADS);
+  USBGeckoOutput();
 }
+
 
 //
 // GetFirstMap
