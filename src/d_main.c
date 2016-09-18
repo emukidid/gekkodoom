@@ -1777,10 +1777,10 @@ void DevicePicker()
 	// Load logo
 	SDL_RWops *logo_rw = SDL_RWFromMem(doom_bmp, doom_bmp_size);
 	SDL_Surface *logo = IMG_LoadTyped_RW(logo_rw, 1, "bmp");
- 	SDL_Rect rlogo = {(640/2) - (logo->w/2), 10, 0, 0}; 
+ 	SDL_Rect rlogo = {(640/2) - (logo->w/2), 10, logo->w, logo->h}; 
 
 	// Select Device Text
-  	SDL_Rect selectDeviceRect = {50, 30 + logo->h, 250, 40};
+  	SDL_Rect selectDeviceRect = {50, 30 + rlogo.y + rlogo.h, 250, 40};
 	SDL_Surface *selectDevice = TTF_RenderText_Solid(doomfnt18, "Welcome to DooM. Select your device below." , clrText);
 		
 	// Confirm button
@@ -1807,8 +1807,7 @@ void DevicePicker()
 #endif
   
 	// Create cursor surface
-	SDL_Surface *sCursor = TTF_RenderText_Solid(doomfnt24, "O", clrText);  
-	SDL_Surface *xCursor = TTF_RenderText_Solid(doomfnt24, "X", clrText);  
+	SDL_Surface *sCursor = TTF_RenderText_Solid(doomfnt24, ".", clrText);  
   
 	// Create text surface
 	bool done = false;  
@@ -1867,12 +1866,7 @@ void DevicePicker()
 		// Check for exit
 		if(buttonDown(BUTTON_EXIT)) exit(0);
 
-		// Check for cursor position
-		bool cursorOver = false;
-		if ((ax > confirmRect.x) && (ax < confirmRect.x+confirmRect.w) && (ay >= confirmRect.y-confirmRect.h) 
-				&& (selectedDevice != UNKNOWN_DEVICE))
-			cursorOver = true;
-		
+		// Check for cursor position	
 		// Confirm Button
 		if ((ax > confirmRect.x) && (ax < confirmRect.x+confirmRect.w) && (ay >= confirmRect.y-confirmRect.h) 
 				&& (selectedDevice != UNKNOWN_DEVICE)
@@ -1882,14 +1876,10 @@ void DevicePicker()
 		SDL_BlitSurface(sdDeviceButton, NULL, screen, &sdDeviceRect);
 		SDL_BlitSurface(usbDeviceButton, NULL, screen, &usbDeviceRect);
 		// SD Button
-		if ((ax >= sdDeviceRect.x) && (ax < sdDeviceRect.x+sdDeviceRect.w) && (ay >= sdDeviceRect.y && ay < sdDeviceRect.y+sdDeviceRect.h))
-			cursorOver = true;
 		if ((ax >= sdDeviceRect.x) && (ax < sdDeviceRect.x+sdDeviceRect.w) && (ay >= sdDeviceRect.y && ay < sdDeviceRect.y+sdDeviceRect.h) 
 				&& (buttonDown(BUTTON_CONFIRM)))
 			selectedDevice = SD_DEVICE;
 		// USB Button
-		if ((ax >= usbDeviceRect.x) && (ax < usbDeviceRect.x+usbDeviceRect.w) && (ay >= usbDeviceRect.y && ay < usbDeviceRect.y+usbDeviceRect.h))
-			cursorOver = true;
 		if ((ax >= usbDeviceRect.x) && (ax < usbDeviceRect.x+usbDeviceRect.w) && (ay >= usbDeviceRect.y && ay < usbDeviceRect.y+usbDeviceRect.h) 
 				&& (buttonDown(BUTTON_CONFIRM)))
 			selectedDevice = USB_DEVICE;
@@ -1897,22 +1887,18 @@ void DevicePicker()
 		SDL_BlitSurface(sdDeviceAButton, NULL, screen, &sdDeviceARect);
 		SDL_BlitSurface(sdDeviceBButton, NULL, screen, &sdDeviceBRect);
 		// SDA Button
-		if ((ax >= sdDeviceARect.x) && (ax < sdDeviceARect.x+sdDeviceARect.w) && (ay >= sdDeviceARect.y && ay < sdDeviceARect.y+sdDeviceARect.h))
-			cursorOver = true;
 		if ((ax >= sdDeviceARect.x) && (ax < sdDeviceARect.x+sdDeviceARect.w) && (ay >= sdDeviceARect.y && ay < sdDeviceARect.y+sdDeviceARect.h)
 				&& (buttonDown(BUTTON_CONFIRM)))
 			selectedDevice = SD_A_DEVICE;
 		// SDB Button
-		if ((ax >= sdDeviceBRect.x) && (ax < sdDeviceBRect.x+sdDeviceBRect.w) && (ay >= sdDeviceBRect.y && ay < sdDeviceBRect.y+sdDeviceBRect.h))
-			cursorOver = true;
 		if ((ax >= sdDeviceBRect.x) && (ax < sdDeviceBRect.x+sdDeviceBRect.w) && (ay >= sdDeviceBRect.y && ay < sdDeviceBRect.y+sdDeviceBRect.h)
 				&& (buttonDown(BUTTON_CONFIRM)))
 			selectedDevice = SD_B_DEVICE;
 #endif
 		
 		// Draw cursor
-		SDL_Rect rcDest = {ax,ay, 0,0};
-		SDL_BlitSurface(cursorOver ? xCursor:sCursor,NULL,screen,&rcDest );
+		SDL_Rect rcDest = {ax, ay, 0,0};
+		SDL_BlitSurface(sCursor,NULL,screen,&rcDest );
 		
 		SDL_Flip(screen);
 	}
@@ -1991,31 +1977,12 @@ void DevicePicker()
 
 void WADPicker()
 {
-	int IWADCHARX = 100;
-	int IWADCHARY = 220;
-	int IWADCHARSPACING = 30;
-	int IWADBOXX = 80;
-	int IWADBOXY = 215;
-	int IWADBOXLINEWIDTH = 2;
-	int IWADBOXWIDTH = 200;
-	int IWADBOXHEIGHT = 200;
-	int PWADCHARX = 400;
-	int PWADCHARY = 70;
-	int PWADBOXX = 380;
-	int PWADBOXY = 60;
-	int PWADBOXLINEWIDTH = 2;
-	int PWADBOXWIDTH = 250;
-	int PWADBOXHEIGHT = 350;
-	int PWADCHARSPACING = 30;
+	int CHARSPACING = 30;
 	int PWADMAXPAGE = 10;
 	int PWADSTARTNUM = 0;
 	int MAX_PWADS = 50;
-	int STARTX = 380;
-	int STARTY = 415;
 	int STARTALPHA = 0;
 	bool STARTFADEIN = TRUE;
-	int STARTWIDTH = 250;
-	int STARTHEIGHT = 40;
 	int CHAR_YPOS;
 	
 	int joyWait = SDL_GetTicks();
@@ -2034,45 +2001,42 @@ void WADPicker()
 	// Load logo
 	SDL_RWops *logo_rw = SDL_RWFromMem(doom_bmp, doom_bmp_size);
 	SDL_Surface *logo = IMG_LoadTyped_RW(logo_rw, 1, "bmp");
- 	SDL_Rect rlogo = {(640/2) - (logo->w/2), 10, 0, 0}; 
+ 	SDL_Rect rlogo = {(640/2) - (logo->w/2), 10, logo->w, logo->h}; 
 
   
 	// Start button
-	SDL_Rect startRect = {STARTX, STARTY, STARTWIDTH, STARTHEIGHT};
-	SDL_Rect startTextRect = {STARTX + 70, STARTY + 5, STARTWIDTH, STARTHEIGHT};
+	SDL_Rect startRect = {(640/2) - 100, rlogo.y + rlogo.h - 40, 200, 40};
+	SDL_Rect startTextRect = {startRect.x + 40, startRect.y + 5, startRect.w, startRect.h};
 	SDL_Surface *startButton = TTF_RenderText_Solid(doomfnt24, "START" , clrStartText);
 
+	// IWAD Header
+	SDL_Rect iwadHeaderRect = {50, 10 + rlogo.y + rlogo.h, 250, 40};
+	SDL_Surface *iwadHeader = TTF_RenderText_Solid(doomfnt18, "CHOOSE WAD" , clrStartText);
+	
  	// PWAD Header
- 	SDL_Rect pwadHeaderRect = {395, 30, 250, 40};
+ 	SDL_Rect pwadHeaderRect = {380, 10 + rlogo.y + rlogo.h, 250, 40};
 	SDL_Surface *pwadHeader = TTF_RenderText_Solid(doomfnt18, "PWAD (Optional)" , clrStartText);
 	  
 	// Create cursor surface
 	SDL_Surface *sCursor = TTF_RenderText_Solid(doomfnt24, ".", clrStartText);  
   
-  
 	// Create text surface
 	SDL_Surface *sText = NULL;
 
 	// Load Boxes
-	SDL_Rect rIWADBox_outer = {IWADBOXX, IWADBOXY, IWADBOXWIDTH, IWADBOXHEIGHT};
-	SDL_Rect rIWADBox_inner = {IWADBOXX + (IWADBOXLINEWIDTH/2), IWADBOXY + (IWADBOXLINEWIDTH/2), \
-		IWADBOXWIDTH - IWADBOXLINEWIDTH, IWADBOXHEIGHT - IWADBOXLINEWIDTH};
-	SDL_Rect rPWADBox_outer = {PWADBOXX, PWADBOXY, PWADBOXWIDTH, PWADBOXHEIGHT};
-	SDL_Rect rPWADBox_inner = {PWADBOXX + (IWADBOXLINEWIDTH/2), PWADBOXY + (IWADBOXLINEWIDTH/2), \
-		PWADBOXWIDTH - PWADBOXLINEWIDTH, PWADBOXHEIGHT - IWADBOXLINEWIDTH};
-	
+	SDL_Rect rIWADBox_outer = {50, 40 + rlogo.y + rlogo.h, 250, 200};
+	SDL_Rect rIWADBox_inner = {rIWADBox_outer.x+1, rIWADBox_outer.y+1, rIWADBox_outer.w-2, rIWADBox_outer.h-2};
+	SDL_Rect rPWADBox_outer = {380, 40 + rlogo.y + rlogo.h, 250, 200};
+	SDL_Rect rPWADBox_inner = {rPWADBox_outer.x+1, rPWADBox_outer.y+1, rPWADBox_outer.w-2, rPWADBox_outer.h-2};
   
-	int selectedIWAD = -1;
 	// Load IWAD files	
 	char* foundIwads[nstandard_iwads];
-	int numIWADSFound = 0;		
-	int i;    	
+	int numIWADSFound = 0, i = 0, selectedIWAD = -1;		
 	for (i=0; i<nstandard_iwads; i++)
 	{
 		if (I_FindFile(standard_iwads[i], ".wad"))
 		{
 			int len = strlen(standard_iwads[i]);
-			//foundIwads[numIWADSFound++] = (char *)standard_iwads[i];
 			foundIwads[numIWADSFound] = malloc(len-4);
 			strncpy(foundIwads[numIWADSFound], (char *)standard_iwads[i], len-4);
 			foundIwads[numIWADSFound++][len-4] = 0;
@@ -2113,68 +2077,68 @@ void WADPicker()
 	int ax = 320; 
 	int ay = 240;
   
-  while (!done)
-  {  		
-  	SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
+	while (!done)
+	{  		
+		SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
 	
-	s32 pad_stickx = PAD_StickX(0);
-    s32 pad_sticky = PAD_StickY(0);
-  	
-  	// Get Wiimote data
-  	u32 wpaddown = WPAD_ButtonsDown(0);
-  	ir_t ir;
-	
-	WPAD_IR(0, &ir);
-	if(ir.ax > 0 && ir.ax < 640)
-	ax = ir.ax;
-	if(ir.ay > 0 && ir.ay < 480)
-	ay = ir.ay;
-	
-	if (pad_stickx < -20) //Left
-		ax -= 2;
-	else if (pad_stickx > 20) //Right
-		ax += 2;
+#ifdef WII
+		// Get Wiimote IR data
+		ir_t ir;
 
-	if (pad_sticky > 20)//Up
-		ay -= 2;
-	else if (pad_sticky < -20)//Down
-		ay += 2;
+		WPAD_IR(0, &ir);
+		if(ir.ax > 0 && ir.ax < 640)
+			ax = ir.ax;
+		if(ir.ay > 0 && ir.ay < 480)
+			ay = ir.ay;
+#endif
+		s32 pad_stickx = PAD_StickX(0);
+		s32 pad_sticky = PAD_StickY(0);
+		if (pad_stickx < -20 && ax > 0) //Left
+			ax -= 2;
+		else if (pad_stickx > 20 && ax < 640-sCursor->w) //Right
+			ax += 2;
+		if (pad_sticky > 20 && ay > 0)//Up
+			ay -= 2;
+		else if (pad_sticky < -20 && ay < 480-sCursor->h)//Down
+			ay += 2;
 		
-	  // Display Logo
-  	SDL_BlitSurface (logo, NULL, screen, &rlogo);
+		// Display Logo
+		SDL_BlitSurface (logo, NULL, screen, &rlogo);
   	
-  	// Display boxes
-  	SDL_FillRect(screen, &rIWADBox_outer, SDL_MapRGB(screen->format, 255, 255, 255));
-  	SDL_FillRect(screen, &rIWADBox_inner, SDL_MapRGB(screen->format, 0, 0, 0));
-  	SDL_FillRect(screen, &rPWADBox_outer, SDL_MapRGB(screen->format, 255, 255, 255));
-  	SDL_FillRect(screen, &rPWADBox_inner, SDL_MapRGB(screen->format, 0, 0, 0));
+		// Display boxes
+		SDL_FillRect(screen, &rIWADBox_outer, SDL_MapRGB(screen->format, 255, 255, 255));
+		SDL_FillRect(screen, &rIWADBox_inner, SDL_MapRGB(screen->format, 0, 0, 0));
+		SDL_FillRect(screen, &rPWADBox_outer, SDL_MapRGB(screen->format, 255, 255, 255));
+		SDL_FillRect(screen, &rPWADBox_inner, SDL_MapRGB(screen->format, 0, 0, 0));
   	
-  	// Display PWAD Header
-  	SDL_BlitSurface(pwadHeader, NULL, screen, &pwadHeaderRect);
+		// Display IWAD Header
+		SDL_BlitSurface(iwadHeader, NULL, screen, &iwadHeaderRect);
+		// Display PWAD Header
+		SDL_BlitSurface(pwadHeader, NULL, screen, &pwadHeaderRect);
   	
-  	// Display start button
-  	// Do alpha fading for start button
+		// Display start button
+		// Do alpha fading for start button
 		if (STARTALPHA >= 253)
 			STARTFADEIN = false;
 		else if (STARTALPHA <= 2)
 			STARTFADEIN = true;
-		  if (STARTFADEIN)
-				STARTALPHA+=5;
-		  else
-				STARTALPHA-=5;
+		if (STARTFADEIN)
+			STARTALPHA+=5;
+		else
+			STARTALPHA-=5;
 		SDL_SetAlpha(startButton, SDL_SRCALPHA, STARTALPHA);
-  	if (selectedIWAD != -1)
+		if (selectedIWAD != -1)
 		{
 			SDL_FillRect(screen, &startRect, SDL_MapRGB(screen->format, 82, 0, 0));
 			SDL_BlitSurface(startButton, NULL, screen, &startTextRect);
 		}
 		
 		// Display IWAD files
-  	int i;
-  	CHAR_YPOS = IWADCHARY;
-  	for (i=0; i<numIWADSFound; i++)
+		int i;
+		CHAR_YPOS = rIWADBox_inner.y;
+		for (i=0; i<numIWADSFound; i++)
 		{
-			SDL_Rect rcDest = {IWADCHARX,CHAR_YPOS, 0,0};
+			SDL_Rect rcDest = {rIWADBox_inner.x,CHAR_YPOS, 0,0};
 			if (selectedIWAD == i)
 				sText =  TTF_RenderText_Solid(doomfnt24, foundIwads[i] , clrFgSelected);
 			else
@@ -2182,20 +2146,18 @@ void WADPicker()
 			SDL_BlitSurface( sText,NULL,screen,&rcDest );
 			if (sText)
 				SDL_FreeSurface( sText );
-			CHAR_YPOS += IWADCHARSPACING;
-
+			CHAR_YPOS += CHARSPACING;
 		}
-			
-		
+
 		// Display PWAD files
-		CHAR_YPOS = PWADCHARY;
+		CHAR_YPOS = rPWADBox_inner.y;
 		bool found;
 		int x;
-  	for (x=0; (((PWADSTARTNUM + x) < numPWADSFound) && (x < PWADMAXPAGE)); x++)
-  	{
-  		int i = PWADSTARTNUM + x;
+		for (x=0; (((PWADSTARTNUM + x) < numPWADSFound) && (x < PWADMAXPAGE)); x++)
+		{
+			int i = PWADSTARTNUM + x;
 			found = false;
-			SDL_Rect rcDest = {PWADCHARX,CHAR_YPOS, 0,0};
+			SDL_Rect rcDest = {rPWADBox_inner.x,CHAR_YPOS, 0,0};
 			for (selectedPWADIndex = 0; selectedPWADIndex < MAX_PWADS; selectedPWADIndex++)
 				if (selectedPWADs[selectedPWADIndex] == i)
 				{
@@ -2203,87 +2165,88 @@ void WADPicker()
 					sText =  TTF_RenderText_Solid(doomfnt24, foundPwads[i] , clrFgSelected);
 					break;
 				}
-  		if (!found)
-				sText =  TTF_RenderText_Solid(doomfnt24, foundPwads[i] , clrFg);
-			SDL_BlitSurface( sText,NULL,screen,&rcDest );
-			if (sText)
-				SDL_FreeSurface( sText );
-			CHAR_YPOS += PWADCHARSPACING;
-  	}
+				if (!found)
+					sText =  TTF_RenderText_Solid(doomfnt24, foundPwads[i] , clrFg);
+				SDL_BlitSurface( sText,NULL,screen,&rcDest );
+				if (sText)
+					SDL_FreeSurface( sText );
+				CHAR_YPOS += CHARSPACING;
+		}
   	
-  	// Draw IR cursor
-  	SDL_Rect rcDest = {ax,ay, 0,0};
+		// Draw IR cursor
+		SDL_Rect rcDest = {ax,ay, 0,0};
 		SDL_BlitSurface(sCursor,NULL,screen,&rcDest );
 		
 		// Check for IR position on IWAD menu
-  	CHAR_YPOS = IWADCHARY;
-  	for (i=0; i<numIWADSFound; i++)
-  	{    
-	  	if ((ax > IWADBOXX) && (ax < (IWADBOXX + IWADBOXWIDTH)))
-				if ((ay > CHAR_YPOS-(IWADCHARSPACING/2)) && (ay < (CHAR_YPOS + (IWADCHARSPACING/2))))
-					if (wpaddown & WPAD_BUTTON_A || PAD_ButtonsDown(0)&PAD_BUTTON_A)
+		CHAR_YPOS = rIWADBox_outer.y;
+		for (i=0; i<numIWADSFound; i++)
+		{    
+			if ((ax > rIWADBox_outer.x) && (ax < (rIWADBox_outer.x + rIWADBox_outer.w)))
+				if ((ay > CHAR_YPOS-(CHARSPACING/2)) && (ay < (CHAR_YPOS + (CHARSPACING/2))))
+					if (buttonDown(BUTTON_CONFIRM))
 						selectedIWAD = i;
-			  CHAR_YPOS += IWADCHARSPACING;
-  	}		
+			CHAR_YPOS += CHARSPACING;
+		}		
 		
   	
 
 		// Check for IR position on PWAD menu
-  	CHAR_YPOS = PWADCHARY;
-  	for (x=0; ((x < numPWADSFound) && (x < PWADMAXPAGE)); x++)
-	  {
-	  		int i = PWADSTARTNUM + x;
-	  		if ((ax > PWADBOXX) && (ax < (PWADBOXX + PWADBOXWIDTH)))
-				  if ((ay > CHAR_YPOS-(PWADCHARSPACING/2)) && (ay < (CHAR_YPOS + (PWADCHARSPACING/2))))
-					{	
-						if (wpaddown & WPAD_BUTTON_A || PAD_ButtonsDown(0)&PAD_BUTTON_A)
+		CHAR_YPOS = rPWADBox_inner.y;
+		for (x=0; ((x < numPWADSFound) && (x < PWADMAXPAGE)); x++)
+		{
+			int i = PWADSTARTNUM + x;
+			if ((ax > rPWADBox_inner.x) && (ax < (rPWADBox_inner.x + rPWADBox_inner.w)))
+				if ((ay > CHAR_YPOS-(CHARSPACING/2)) && (ay < (CHAR_YPOS + (CHARSPACING/2))))
+				{	
+					if (buttonDown(BUTTON_CONFIRM))
+					{
+						if (SDL_GetTicks() > joyWait)
 						{
-							if (SDL_GetTicks() > joyWait)
-							{
-								bool deselected = false;
-								
-									// Need to deselect?
-									for (selectedPWADIndex = 0; selectedPWADIndex < MAX_PWADS; selectedPWADIndex++) 
-										if (selectedPWADs[selectedPWADIndex] == i)
-										{
-											deselected = true;
-											selectedPWADs[selectedPWADIndex] = -1;
-										}
-											
-								// Find slot to store
-								if (!deselected)
-									for (selectedPWADIndex = 0; selectedPWADIndex < MAX_PWADS; selectedPWADIndex++) 
-										if (selectedPWADs[selectedPWADIndex] == -1)
-										{
-											selectedPWADs[selectedPWADIndex] = i;
-											break;
-										}
-	
-								joyWait = SDL_GetTicks() + 10;
-							}
+							bool deselected = false;
+
+							// Need to deselect?
+							for (selectedPWADIndex = 0; selectedPWADIndex < MAX_PWADS; selectedPWADIndex++) 
+								if (selectedPWADs[selectedPWADIndex] == i)
+								{
+									deselected = true;
+									selectedPWADs[selectedPWADIndex] = -1;
+								}
+
+							// Find slot to store
+							if (!deselected)
+								for (selectedPWADIndex = 0; selectedPWADIndex < MAX_PWADS; selectedPWADIndex++) 
+									if (selectedPWADs[selectedPWADIndex] == -1)
+									{
+										selectedPWADs[selectedPWADIndex] = i;
+										break;
+									}
+
+							joyWait = SDL_GetTicks() + 10;
 						}
 					}
-					CHAR_YPOS += PWADCHARSPACING;
-	  }
+				}
+			CHAR_YPOS += CHARSPACING;
+		}
 
-		if (wpaddown & WPAD_BUTTON_B || PAD_ButtonsDown(0)&PAD_TRIGGER_Z) exit(0);
-		if ((ax > STARTX) && (ax < STARTX+STARTWIDTH) && (ay >= STARTY-STARTHEIGHT) 
+		// Check for exit
+		if(buttonDown(BUTTON_EXIT)) exit(0);
+		
+		if ((ax > startRect.x) && (ax < startRect.x+startRect.w) && (ay >= startRect.y && ay < startRect.y+startRect.h) 
 				&& (selectedIWAD != -1)
-				&& (wpaddown & WPAD_BUTTON_A || PAD_ButtonsDown(0)&PAD_BUTTON_A))
+				&& buttonDown(BUTTON_CONFIRM))
 			done = true;
-		if ((wpaddown & WPAD_BUTTON_LEFT || PAD_ButtonsDown(0)&PAD_BUTTON_LEFT) && (SDL_GetTicks() > joyWait) && (PWADSTARTNUM > 0)) 
+		if (buttonDown(BUTTON_LEFT) && (SDL_GetTicks() > joyWait) && (PWADSTARTNUM > 0)) 
 		{
 			PWADSTARTNUM -= PWADMAXPAGE;
 			if (PWADSTARTNUM < 0)
 				PWADSTARTNUM = 0;
 			joyWait = SDL_GetTicks() + 10;
 		}
-		if ((wpaddown & WPAD_BUTTON_RIGHT || PAD_ButtonsDown(0)&PAD_BUTTON_RIGHT) && (SDL_GetTicks() > joyWait) && (PWADSTARTNUM + PWADMAXPAGE < numPWADSFound))
-  	{
-  		PWADSTARTNUM += PWADMAXPAGE;
-  		joyWait = SDL_GetTicks() + 10;
-  	}		
-		
+		if (buttonDown(BUTTON_RIGHT) && (SDL_GetTicks() > joyWait) && (PWADSTARTNUM + PWADMAXPAGE < numPWADSFound))
+		{
+			PWADSTARTNUM += PWADMAXPAGE;
+			joyWait = SDL_GetTicks() + 10;
+		}		
 		SDL_Flip(screen);
   }
 
@@ -2296,7 +2259,7 @@ void WADPicker()
 	for (selectedPWADIndex = 0; selectedPWADIndex < MAX_PWADS; selectedPWADIndex++)
 		if (selectedPWADs[selectedPWADIndex] != -1)
 		{
-		char *p = "/apps/wiidoom/data/pwads/";
+			char *p = "/apps/wiidoom/data/pwads/";
 			char *f = malloc(strlen(p) + strlen(foundPwads[selectedPWADs[selectedPWADIndex]]) + 4);
 			sprintf(f, "%s%s.wad", p, foundPwads[selectedPWADs[selectedPWADIndex]]);
 			selectedPWADFiles[numSelectedPWADFiles] = malloc(sizeof(f));
